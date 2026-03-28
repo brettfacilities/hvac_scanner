@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HVAC Asset Manager</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e1117; --surface: #161b24; --surface2: #1e2530;
+    --border: #2a3040; --border-bright: #3d4d63;
+    --accent: #00d4aa; --accent-dim: #00a882; --accent-glow: rgba(0,212,170,0.12);
+    --text: #e8edf4; --text-muted: #7a8ba0; --text-dim: #4a5a70;
+    --red: #ff4d6a; --amber: #f59e0b; --blue: #3b82f6;
+    --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+  }
+  body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── HEADER ── */
+  header { padding: 0 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; height: 52px; flex-shrink: 0; }
+  .logo { width: 30px; height: 30px; border: 1.5px solid var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+  header h1 { font-size: 14px; font-weight: 500; letter-spacing: 0.02em; }
+
+  /* ── TABS ── */
+  .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-shrink: 0; padding: 0 24px; background: var(--surface); }
+  .tab { padding: 10px 18px; font-size: 12px; font-family: var(--mono); color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; letter-spacing: 0.04em; user-select: none; }
+  .tab:hover { color: var(--text-muted); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  .tab-content { display: none; flex: 1; overflow: hidden; }
+  .tab-content.active { display: flex; }
+  .left-panel { width: 340px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
+  .right-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── SHARED COMPONENTS ── */
+  .panel-label { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 10px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
+  .drop-zone { margin: 14px; border: 1.5px dashed var(--border-bright); border-radius: 10px; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; background: var(--surface); overflow: hidden; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: var(--accent-glow); }
+  .drop-zone.has-image { border-style: solid; border-color: var(--accent); min-height: 200px; }
+  .drop-zone img { max-width: 100%; max-height: 190px; border-radius: 6px; object-fit: contain; }
+  .drop-icon { font-size: 28px; opacity: 0.3; }
+  .drop-label { font-size: 12px; color: var(--text-muted); text-align: center; line-height: 1.6; }
+  .drop-label strong { color: var(--accent); display: block; font-size: 12px; margin-bottom: 2px; }
+  .drop-label em { font-style: normal; font-size: 10px; color: var(--text-dim); font-family: var(--mono); }
+  input[type=file] { display: none; }
+  .btn-row { display: flex; gap: 8px; padding: 0 14px 10px; }
+  .btn { flex: 1; padding: 8px 10px; border-radius: 7px; font-size: 11px; font-family: var(--sans); font-weight: 500; cursor: pointer; transition: all 0.15s; border: 1px solid var(--border-bright); background: var(--surface2); color: var(--text); display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #081a12; border-color: var(--accent); font-weight: 600; }
+  .btn-primary:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #081a12; }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn-danger { border-color: var(--red); color: var(--red); background: rgba(255,77,106,0.06); }
+  .btn-danger:hover { background: rgba(255,77,106,0.12); border-color: var(--red); color: var(--red); }
+  .field-wrap { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 5px; }
+  .field-wrap label { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.07em; }
+  .field-wrap input, .field-wrap select, .field-wrap textarea { background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px; color: var(--text); font-size: 12px; font-family: var(--sans); outline: none; transition: border-color 0.15s; width: 100%; }
+  .field-wrap input:focus, .field-wrap select:focus, .field-wrap textarea:focus { border-color: var(--accent); }
+  .field-wrap input::placeholder, .field-wrap textarea::placeholder { color: var(--text-dim); }
+  .field-wrap select option { background: var(--surface2); }
+  .field-wrap textarea { resize: vertical; min-height: 64px; font-family: var(--sans); line-height: 1.5; }
+  .status-bar { margin: 0 14px 10px; padding: 8px 12px; border-radius: 7px; font-size: 11px; font-family: var(--mono); display: none; align-items: center; gap: 8px; }
+  .status-bar.scanning { display: flex; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.25); color: #93c5fd; }
+  .status-bar.done { display: flex; background: var(--accent-glow); border: 1px solid rgba(0,212,170,0.3); color: var(--accent); }
+  .status-bar.error { display: flex; background: rgba(255,77,106,0.08); border: 1px solid rgba(255,77,106,0.25); color: #fca5a5; }
+  .spinner { width: 11px; height: 11px; border: 2px solid rgba(147,197,253,0.3); border-top-color: #93c5fd; border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .section-title { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 7px; }
+
+  /* ── FIELD GRID (right panel extracted data) ── */
+  .results-area { flex: 1; overflow-y: auto; }
+  .field-grid { display: flex; flex-direction: column; }
+  .field-row { display: grid; grid-template-columns: 130px 1fr; border-bottom: 1px solid var(--border); min-height: 44px; }
+  .field-lbl { padding: 12px 14px; border-right: 1px solid var(--border); font-size: 10px; font-family: var(--mono); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: flex; align-items: center; }
+  .field-val { padding: 6px 10px; display: flex; align-items: center; }
+  .field-val input { background: transparent; border: none; outline: none; font-size: 12px; font-family: var(--mono); color: var(--text); width: 100%; padding: 4px 5px; border-radius: 4px; transition: background 0.15s; }
+  .field-val input:hover { background: var(--surface2); }
+  .field-val input:focus { background: var(--surface2); outline: 1px solid var(--accent); }
+  .field-val input::placeholder { color: var(--text-dim); }
+  .cdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-left: 6px; }
+  .ch { background: var(--accent); } .cm { background: var(--amber); } .cl { background: var(--red); }
+  .actions-bar { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; }
+  .actions-bar .btn-primary { flex: 2; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 50px 36px; color: var(--text-dim); flex: 1; }
+  .empty-icon { width: 48px; height: 48px; border: 1.5px solid var(--border-bright); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; opacity: 0.4; }
+  .empty-state p { font-size: 12px; color: var(--text-dim); text-align: center; line-height: 1.7; max-width: 280px; }
+
+  /* ── TRACKER TABLE ── */
+  .tracker-section { border-top: 1px solid var(--border); flex-shrink: 0; }
+  .tracker-header { padding: 9px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .tracker-header span:first-child { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+  .badge { font-size: 10px; font-family: var(--mono); padding: 2px 7px; border-radius: 4px; background: var(--accent-glow); color: var(--accent); border: 1px solid rgba(0,212,170,0.2); }
+  .badge-repair { background: rgba(59,130,246,0.1); color: #93c5fd; border-color: rgba(59,130,246,0.25); }
+  .tracker-scroll { overflow-x: auto; max-height: 200px; overflow-y: auto; }
+  .t-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+  .t-table th { padding: 6px 10px; text-align: left; font-size: 9px; font-weight: 500; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+  .t-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text-muted); white-space: nowrap; }
+  .t-table tr:hover td { background: var(--surface); }
+  .t-table td:first-child { color: var(--text); }
+  .history-link { color: var(--accent); cursor: pointer; text-decoration: none; font-size: 10px; border: 1px solid rgba(0,212,170,0.3); padding: 2px 7px; border-radius: 4px; background: var(--accent-glow); transition: all 0.15s; display: inline-block; }
+  .history-link:hover { background: rgba(0,212,170,0.2); }
+  .history-link.has-repairs { }
+  .history-link.no-repairs { color: var(--text-dim); border-color: var(--border); background: transparent; }
+  .export-row { padding: 9px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+  .export-row .btn { flex: none; padding: 6px 12px; font-size: 11px; }
+
+  /* ── REPAIR INVOICE PANEL ── */
+  .repair-results { flex: 1; overflow-y: auto; }
+  .repair-field-grid { display: flex; flex-direction: column; }
+  .repair-field-row { display: grid; grid-template-columns: 140px 1fr; border-bottom: 1px solid var(--border); min-height: 44px; }
+
+  /* ── RECENT REPAIRS LIST (right side of repair tab) ── */
+  .recent-repairs { padding: 14px 18px; overflow-y: auto; flex: 1; }
+  .repair-card { border: 1px solid var(--border); border-radius: 9px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+  .repair-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .repair-unit-label { font-size: 12px; font-weight: 500; color: var(--text); }
+  .repair-date-badge { font-size: 10px; font-family: var(--mono); color: var(--text-dim); background: var(--surface2); padding: 2px 7px; border-radius: 4px; border: 1px solid var(--border); }
+  .repair-row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .repair-key { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; min-width: 90px; flex-shrink: 0; padding-top: 1px; }
+  .repair-val { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ── MODAL ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: none; align-items: center; justify-content: center; padding: 24px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border-bright); border-radius: 14px; width: 100%; max-width: 760px; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .modal-title { font-size: 14px; font-weight: 500; }
+  .modal-subtitle { font-size: 11px; font-family: var(--mono); color: var(--text-muted); margin-top: 2px; }
+  .modal-close { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.15s; }
+  .modal-close:hover { border-color: var(--red); color: var(--red); }
+  .modal-body { overflow-y: auto; flex: 1; padding: 18px 20px; }
+  .modal-empty { text-align: center; padding: 40px; color: var(--text-dim); font-size: 13px; }
+  .repair-entry { border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px; margin-bottom: 12px; background: var(--bg); }
+  .repair-entry-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .repair-entry-num { font-size: 10px; font-family: var(--mono); color: var(--text-dim); }
+  .repair-entry-date { font-size: 11px; font-family: var(--mono); color: var(--accent); }
+  .repair-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+  .rg-item label { font-size: 9px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 3px; }
+  .rg-item span { font-size: 12px; color: var(--text-muted); }
+  .rg-item.full { grid-column: 1 / -1; }
+  .rg-item span.highlight { color: var(--text); }
+  .modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+
+  /* ── NOTIF ── */
+  .notif { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; border-radius: 7px; font-size: 11px; font-family: var(--mono); opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 999; white-space: nowrap; }
+  .notif.show { opacity: 1; }
+
+  /* ── HISTORY SIDEBAR in left panel ── */
+  .scan-history { padding: 0 14px 14px; }
+
+  @media (max-width: 800px) {
+    .tab-content { flex-direction: column; }
+    .left-panel { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+    .repair-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⚙</div>
+  <h1>HVAC Asset Manager</h1>
+</header>
+
+<!-- TABS -->
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('nameplate')">Nameplate Scanner</div>
+  <div class="tab" onclick="switchTab('repair')">Repair Invoice Scanner</div>
+</div>
+
+<!-- ══════════════════ TAB 1: NAMEPLATE ══════════════════ -->
+<div class="tab-content active" id="tab-nameplate">
+  <div class="left-panel">
+    <div class="panel-label">Step 1 — Set Location</div>
+    <div class="field-wrap" style="padding:12px 14px 8px;">
+      <label>Building</label>
+      <input type="text" id="building-input" placeholder="e.g. Admin HVAC, Chapel…">
+    </div>
+    <div class="field-wrap" style="padding:0 14px 12px; border-bottom:1px solid var(--border);">
+      <label>Room / Area</label>
+      <input type="text" id="room-input" placeholder="e.g. North East, Server Room…">
+    </div>
+    <div class="panel-label">Step 2 — Scan Nameplate</div>
+    <div class="drop-zone" id="np-drop" onclick="document.getElementById('np-file').click()">
+      <div class="drop-icon" id="np-drop-icon">📷</div>
+      <div class="drop-label" id="np-drop-label">
+        <strong>Drop photo or click to browse</strong>
+        HVAC nameplate · Model sticker · Equipment tag<br>
+        <em>JPG · PNG · WEBP</em>
+      </div>
+      <img id="np-preview" style="display:none;" alt="">
+    </div>
+    <input type="file" id="np-file" accept="image/*">
+    <div class="btn-row">
+      <button class="btn" onclick="document.getElementById('np-file').click()">📁 Browse</button>
+      <button class="btn" onclick="openCam('np-file')">📸 Camera</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="np-scan-btn" onclick="scanNameplate()" disabled>✦ Scan with AI</button>
+    </div>
+    <div class="status-bar" id="np-status">
+      <div class="spinner"></div><span id="np-status-text">Scanning…</span>
+    </div>
+    <div class="scan-history">
+      <div class="section-title">Recent scans</div>
+      <div id="np-history" style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">No scans yet</div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-label">Extracted Data</div>
+    <div class="results-area" id="np-results">
+      <div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <p>Set the location, upload a nameplate photo, then hit <strong style="color:var(--accent)">Scan with AI</strong>.</p>
+      </div>
+    </div>
+
+    <div class="tracker-section">
+      <div class="tracker-header">
+        <span>Asset Tracker Log</span>
+        <span class="badge" id="tracker-count">0 units</span>
+      </div>
+      <div class="tracker-scroll">
+        <table class="t-table">
+          <thead>
+            <tr>
+              <th>Building</th><th>Room/Area</th><th>Manufacturer</th><th>Model #</th><th>Serial #</th><th>Tons</th><th>Year</th><th>Repairs</th>
+            </tr>
+          </thead>
+          <tbody id="tracker-body">
+            <tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px;">No units added yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="export-row">
+        <button class="btn" onclick="exportCSV()">⬇ CSV</button>
+        <button class="btn" onclick="copyJSON()">⎘ JSON</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ TAB 2: REPAIR ══════════════════ -->
+<div class="tab-content" id="tab-repair">
+  <div class="left-panel">
+    <div class="panel-label">Step 1 — Select Unit</div>
+    <div class="field-wrap" style="padding:12px 14px 12px; border-bottom:1px solid var(--border);">
+      <label>Link repair to unit</label>
+      <select id="repair-unit-select">
+        <option value="">— Add units in Nameplate Scanner first —</option>
+      </select>
+    </div>
+    <div class="panel-label">Step 2 — Scan Invoice</div>
+    <div class="drop-zone" id="rp-drop" onclick="document.getElementById('rp-file').click()">
+      <div class="drop-icon" id="rp-drop-icon">🧾</div>
+      <div class="drop-label" id="rp-drop-label">
+        <strong>Drop repair invoice or photo</strong>
+        Invoice · Work order · Receipt · Service report<br>
+        <em>JPG · PNG · WEBP · PDF photo</em>
+      </div>
+      <img id="rp-preview" style="display:none;" alt="">
+    </div>
+    <input type="file" id="rp-file" accept="image/*">
+    <div class="btn-row">
+      <button class="btn" onclick="document.getElementById('rp-file').click()">📁 Browse</button>
+      <button class="btn" onclick="openCam('rp-file')">📸 Camera</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="rp-scan-btn" onclick="scanRepair()" disabled>✦ Scan Invoice with AI</button>
+    </div>
+    <div class="status-bar" id="rp-status">
+      <div class="spinner"></div><span id="rp-status-text">Reading invoice…</span>
+    </div>
+    <div class="scan-history" style="padding:0 14px 14px;">
+      <div class="section-title">Recent invoices scanned</div>
+      <div id="rp-history" style="font-size:11px;color:var(--text-dim);font-family:var(--mono);">None yet</div>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="panel-label">Extracted Repair Data — review & save</div>
+    <div class="repair-results" id="rp-results">
+      <div class="empty-state">
+        <div class="empty-icon">🧾</div>
+        <p>Select a unit, upload a repair invoice photo, then hit <strong style="color:var(--accent)">Scan Invoice with AI</strong> to extract repair details.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════ REPAIR HISTORY MODAL ══════════════════ -->
+<div class="modal-overlay" id="repair-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-unit-title">Repair History</div>
+        <div class="modal-subtitle" id="modal-unit-sub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <div class="modal-empty">No repairs logged for this unit yet.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="exportRepairPDF()">⬇ Print / Save PDF</button>
+      <button class="btn btn-primary" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script>
+// ─── STATE ───
+let npImgBase64 = null, npImgMime = null;
+let rpImgBase64 = null, rpImgMime = null;
+let trackerData = [];   // array of unit objects
+let repairData  = {};   // { unitId: [repair, repair, ...] }
+let currentNpResult = null;
+let currentRpResult = null;
+let modalUnitId = null;
+
+// ─── NAMEPLATE FIELDS ───
+const NP_FIELDS = [
+  { key: 'building',             label: 'Building',               csvCol: 'Building',                              ph: 'e.g. Admin HVAC' },
+  { key: 'room_area',            label: 'Room / Area',            csvCol: 'Room/Area',                             ph: 'e.g. North East' },
+  { key: 'system_type',          label: 'System Type',            csvCol: 'System Type (RTU/Split/Mini Split)',     ph: 'Package Unit (RTU), Split…' },
+  { key: 'manufacturer',         label: 'Manufacturer',           csvCol: 'Manufacturer',                          ph: 'e.g. Carrier, Trane' },
+  { key: 'model_number',         label: 'Model Number',           csvCol: 'Model Number',                          ph: 'e.g. 48HCDD10A3A5' },
+  { key: 'serial_number',        label: 'Serial Number',          csvCol: 'Serial Number',                         ph: 'e.g. 4622C07503' },
+  { key: 'tonnage',              label: 'Tonnage',                csvCol: 'Tonnage',                               ph: 'e.g. 5.0' },
+  { key: 'install_year',         label: 'Install Year',           csvCol: 'Install Year',                          ph: 'e.g. 2018' },
+  { key: 'estimated_age',        label: 'Estimated Age',          csvCol: 'Estimated Age',                         ph: 'Auto-calculated' },
+  { key: 'condition',            label: 'Condition',              csvCol: 'Condition (Good/Fair/Poor)',             ph: 'Good / Fair / Poor' },
+  { key: 'last_service_date',    label: 'Last Service Date',      csvCol: 'Last Service Date',                     ph: 'e.g. 2024-03-15' },
+  { key: 'known_issues',         label: 'Known Issues',           csvCol: 'Known Issues',                          ph: 'e.g. Leaking refrigerant' },
+  { key: 'replacement_priority', label: 'Replacement Priority',   csvCol: 'Replacement Priority (High/Med/Low)',   ph: 'High / Med / Low' },
+  { key: 'notes',                label: 'Notes',                  csvCol: 'Notes',                                 ph: 'Voltage, refrigerant, SEER…' },
+];
+
+// ─── REPAIR FIELDS ───
+const RP_FIELDS = [
+  { key: 'repair_date',        label: 'Date of Repair',      ph: 'e.g. 2024-06-15' },
+  { key: 'technician',         label: 'Technician / Co.',    ph: 'e.g. John Smith / Cool Air HVAC' },
+  { key: 'invoice_number',     label: 'Invoice / WO #',      ph: 'e.g. INV-2024-0042' },
+  { key: 'issue_found',        label: 'Issue Found',         ph: 'e.g. Compressor failure, refrigerant leak' },
+  { key: 'work_performed',     label: 'Work Performed',      ph: 'e.g. Replaced compressor, recharged R-410A' },
+  { key: 'parts_used',         label: 'Parts Used',          ph: 'e.g. Copeland compressor ZP34K5E-PFV' },
+  { key: 'labor_cost',         label: 'Labor Cost',          ph: 'e.g. $450.00' },
+  { key: 'parts_cost',         label: 'Parts Cost',          ph: 'e.g. $1,200.00' },
+  { key: 'total_cost',         label: 'Total Cost',          ph: 'e.g. $1,650.00' },
+  { key: 'warranty_info',      label: 'Warranty',            ph: 'e.g. 1 yr parts & labor' },
+  { key: 'next_service_due',   label: 'Next Service Due',    ph: 'e.g. 2025-06-15' },
+  { key: 'repair_notes',       label: 'Notes',               ph: 'Any additional repair notes' },
+];
+
+// ─── TABS ───
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ─── DROP / FILE LOADING ───
+function setupDrop(zoneId, imgId, iconId, lblId, base64Setter, mimeSetter, btnId) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f && f.type.startsWith('image/')) loadImg(f, imgId, iconId, lblId, zoneId, base64Setter, mimeSetter, btnId);
+  });
+}
+setupDrop('np-drop','np-preview','np-drop-icon','np-drop-label', v=>npImgBase64=v, v=>npImgMime=v, 'np-scan-btn');
+setupDrop('rp-drop','rp-preview','rp-drop-icon','rp-drop-label', v=>rpImgBase64=v, v=>rpImgMime=v, 'rp-scan-btn');
+
+document.getElementById('np-file').addEventListener('change', e => { if(e.target.files[0]) loadImg(e.target.files[0],'np-preview','np-drop-icon','np-drop-label','np-drop',v=>npImgBase64=v,v=>npImgMime=v,'np-scan-btn'); });
+document.getElementById('rp-file').addEventListener('change', e => { if(e.target.files[0]) loadImg(e.target.files[0],'rp-preview','rp-drop-icon','rp-drop-label','rp-drop',v=>rpImgBase64=v,v=>rpImgMime=v,'rp-scan-btn'); });
+
+function loadImg(file, imgId, iconId, lblId, zoneId, b64Set, mimeSet, btnId) {
+  mimeSet(file.type || 'image/jpeg');
+  const reader = new FileReader();
+  reader.onload = e => {
+    b64Set(e.target.result.split(',')[1]);
+    const img = document.getElementById(imgId);
+    img.src = e.target.result; img.style.display = 'block';
+    document.getElementById(iconId).style.display = 'none';
+    document.getElementById(lblId).style.display = 'none';
+    document.getElementById(zoneId).classList.add('has-image');
+    document.getElementById(btnId).disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+
+function openCam(inputId) {
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='image/*'; inp.capture='environment';
+  inp.onchange = e => {
+    if (!e.target.files[0]) return;
+    const isNp = inputId === 'np-file';
+    loadImg(e.target.files[0],
+      isNp?'np-preview':'rp-preview',
+      isNp?'np-drop-icon':'rp-drop-icon',
+      isNp?'np-drop-label':'rp-drop-label',
+      isNp?'np-drop':'rp-drop',
+      isNp?(v=>npImgBase64=v):(v=>rpImgBase64=v),
+      isNp?(v=>npImgMime=v):(v=>rpImgMime=v),
+      isNp?'np-scan-btn':'rp-scan-btn');
+  };
+  inp.click();
+}
+
+// ─── AI CALL ───
+async function callClaude(system, imgBase64, imgMime, userText) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1200,
+      system,
+      messages: [{ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: imgMime, data: imgBase64 } },
+        { type: 'text', text: userText }
+      ]}]
+    })
+  });
+  const data = await res.json();
+  const raw = data.content.map(i => i.text||'').join('').replace(/```json|```/g,'').trim();
+  return JSON.parse(raw);
+}
+
+// ─── NAMEPLATE SCAN ───
+async function scanNameplate() {
+  if (!npImgBase64) return;
+  const building = document.getElementById('building-input').value.trim();
+  const room = document.getElementById('room-input').value.trim();
+  setStatus('np-status','scanning','Scanning nameplate with AI…');
+  document.getElementById('np-scan-btn').disabled = true;
+  const sys = `You are an expert HVAC data extraction assistant. Return ONLY valid JSON, no markdown.
+{
+  "building":"","room_area":"","system_type":"","manufacturer":"","model_number":"","serial_number":"",
+  "tonnage":"","install_year":"","estimated_age":"","condition":"","last_service_date":"",
+  "known_issues":"","replacement_priority":"","notes":"",
+  "confidence":{"manufacturer":"high|medium|low","model_number":"high|medium|low","serial_number":"high|medium|low","tonnage":"high|medium|low"}
+}
+Rules:
+- building: always use "${building||'not provided'}"
+- room_area: always use "${room||'not provided'}"
+- system_type: "Package Unit (RTU)", "Split System", "Mini-Split", "Chiller", "Air Handler", "PTAC"
+- tonnage: decode from model if not explicit. 018=1.5T 024=2T 030=2.5T 036=3T 042=3.5T 048=4T 060=5T 072=6T 090=7.5T 120=10T. Number only.
+- install_year: 4-digit year only from date codes or stickers
+- estimated_age: current year minus install_year, e.g. "7 years"
+- notes: voltage, refrigerant, EER, SEER, MCA, MOCP, amps, phase
+- Leave "" if not visible`;
+  try {
+    const parsed = await callClaude(sys, npImgBase64, npImgMime, 'Extract all HVAC equipment data from this nameplate.');
+    if (building) parsed.building = building;
+    if (room) parsed.room_area = room;
+    currentNpResult = parsed;
+    renderNpFields(parsed);
+    setStatus('np-status','done','Extraction complete — review and add to tracker');
+  } catch(e) {
+    setStatus('np-status','error','Extraction failed — check connection');
+  }
+  document.getElementById('np-scan-btn').disabled = false;
+}
+
+function renderNpFields(data) {
+  const area = document.getElementById('np-results');
+  let html = '<div class="field-grid">';
+  NP_FIELDS.forEach(f => {
+    const val = data[f.key]||'';
+    const conf = data.confidence && data.confidence[f.key];
+    const dot = conf ? `<div class="cdot ${cc(conf)}" title="${conf} confidence"></div>` : '';
+    html += `<div class="field-row"><div class="field-lbl">${f.label}</div><div class="field-val"><input type="text" id="nf-${f.key}" value="${esc(val)}" placeholder="${f.ph}">${dot}</div></div>`;
+  });
+  html += '</div>';
+  html += `<div class="actions-bar"><button class="btn" onclick="clearNp()">✕ Clear</button><button class="btn btn-primary" onclick="addToTracker()">+ Add to Tracker</button></div>`;
+  area.innerHTML = html;
+}
+
+function clearNp() {
+  document.getElementById('np-results').innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Set the location, upload a nameplate photo, then hit <strong style="color:var(--accent)">Scan with AI</strong>.</p></div>`;
+  document.getElementById('np-status').className = 'status-bar';
+  currentNpResult = null;
+}
+
+function getNpVals() {
+  const e={};
+  NP_FIELDS.forEach(f=>{ const el=document.getElementById('nf-'+f.key); e[f.key]=el?el.value.trim():''; });
+  return e;
+}
+
+function unitLabel(u) {
+  return [u.building, u.room_area].filter(Boolean).join(' › ') || [u.manufacturer, u.model_number].filter(Boolean).join(' ') || 'Unknown Unit';
+}
+
+function addToTracker() {
+  const entry = { ...getNpVals(), id: Date.now(), timestamp: new Date().toLocaleDateString() };
+  if (entry.install_year && !entry.estimated_age) {
+    const yr = parseInt(entry.install_year);
+    if (!isNaN(yr)) entry.estimated_age = (new Date().getFullYear() - yr) + ' years';
+  }
+  trackerData.push(entry);
+  repairData[entry.id] = [];
+  updateTrackerTable();
+  updateRepairUnitSelect();
+  addNpHistory(entry);
+  showNotif('Unit added to tracker ✓');
+}
+
+function updateTrackerTable() {
+  const n = trackerData.length;
+  document.getElementById('tracker-count').textContent = n + ' unit' + (n!==1?'s':'');
+  const body = document.getElementById('tracker-body');
+  if (!n) { body.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:16px;">No units added yet</td></tr>'; return; }
+  body.innerHTML = trackerData.map(e => {
+    const repairs = (repairData[e.id]||[]).length;
+    const linkClass = repairs > 0 ? 'history-link has-repairs' : 'history-link no-repairs';
+    const linkLabel = repairs > 0 ? `📋 ${repairs} repair${repairs!==1?'s':''}` : '+ add repair';
+    return `<tr>
+      <td>${esc(e.building||'—')}</td>
+      <td>${esc(e.room_area||'—')}</td>
+      <td>${esc(e.manufacturer||'—')}</td>
+      <td>${esc(e.model_number||'—')}</td>
+      <td>${esc(e.serial_number||'—')}</td>
+      <td>${esc(e.tonnage||'—')}</td>
+      <td>${esc(e.install_year||'—')}</td>
+      <td><span class="${linkClass}" onclick="openRepairModal(${e.id})">${linkLabel}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function addNpHistory(entry) {
+  const h = document.getElementById('np-history');
+  if (h.style && !h.querySelector) return;
+  const label = unitLabel(entry);
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);margin-bottom:5px;font-size:11px;font-family:var(--mono);color:var(--text-muted);';
+  div.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0;display:inline-block;"></span>${esc(label)}`;
+  if (h.tagName === 'DIV' && h.style.color) h.style.display = 'none';
+  h.parentNode.insertBefore(div, h);
+}
+
+// ─── REPAIR UNIT SELECT ───
+function updateRepairUnitSelect() {
+  const sel = document.getElementById('repair-unit-select');
+  const prev = sel.value;
+  sel.innerHTML = trackerData.length === 0
+    ? '<option value="">— Add units in Nameplate Scanner first —</option>'
+    : '<option value="">— Select a unit —</option>' + trackerData.map(u => `<option value="${u.id}">${esc(unitLabel(u))}</option>`).join('');
+  if (prev) sel.value = prev;
+}
+
+// ─── REPAIR SCAN ───
+async function scanRepair() {
+  if (!rpImgBase64) return;
+  const unitId = document.getElementById('repair-unit-select').value;
+  if (!unitId) { showNotif('Please select a unit first'); return; }
+  setStatus('rp-status','scanning','Reading invoice with AI…');
+  document.getElementById('rp-scan-btn').disabled = true;
+
+  const unit = trackerData.find(u => u.id == unitId);
+  const unitInfo = unit ? `Unit: ${unit.manufacturer||''} ${unit.model_number||''}, Serial: ${unit.serial_number||''}, Location: ${unitLabel(unit)}` : '';
+
+  const sys = `You are an expert HVAC repair invoice extraction assistant. Return ONLY valid JSON, no markdown.
+{
+  "repair_date":"","technician":"","invoice_number":"","issue_found":"",
+  "work_performed":"","parts_used":"","labor_cost":"","parts_cost":"",
+  "total_cost":"","warranty_info":"","next_service_due":"","repair_notes":""
+}
+This invoice is for: ${unitInfo}
+Rules:
+- repair_date: extract date of service/repair in YYYY-MM-DD format if possible
+- technician: name of tech and/or company name
+- invoice_number: any invoice, work order, or job number
+- issue_found: what problem was diagnosed or reported
+- work_performed: detailed description of all work done
+- parts_used: list all parts, model numbers if visible
+- labor_cost: labor charges only, include $ symbol
+- parts_cost: parts/materials cost, include $ symbol
+- total_cost: total invoice amount, include $ symbol
+- warranty_info: any warranty on parts or labor mentioned
+- next_service_due: any recommended follow-up service date
+- repair_notes: anything else useful from the invoice
+- Leave "" if not found on invoice`;
+  try {
+    const parsed = await callClaude(sys, rpImgBase64, rpImgMime, 'Extract all repair and invoice data from this document.');
+    currentRpResult = { ...parsed, unit_id: unitId };
+    renderRpFields(parsed, unitId);
+    setStatus('rp-status','done','Invoice read — review and save repair record');
+    addRpHistory(unit, parsed);
+  } catch(e) {
+    setStatus('rp-status','error','Extraction failed — check connection');
+  }
+  document.getElementById('rp-scan-btn').disabled = false;
+}
+
+function renderRpFields(data, unitId) {
+  const area = document.getElementById('rp-results');
+  const unit = trackerData.find(u => u.id == unitId);
+  let html = `<div style="padding:10px 16px 0;border-bottom:1px solid var(--border);margin-bottom:0;">
+    <div style="font-size:11px;font-family:var(--mono);color:var(--text-muted);padding-bottom:8px;">
+      📍 Linked to: <strong style="color:var(--accent);">${esc(unit ? unitLabel(unit) : 'Unknown')}</strong>
+    </div></div>`;
+  html += '<div class="field-grid">';
+  RP_FIELDS.forEach(f => {
+    const val = data[f.key]||'';
+    html += `<div class="field-row"><div class="field-lbl">${f.label}</div><div class="field-val"><input type="text" id="rf-${f.key}" value="${esc(val)}" placeholder="${f.ph}"></div></div>`;
+  });
+  html += '</div>';
+  html += `<div class="actions-bar"><button class="btn" onclick="clearRp()">✕ Clear</button><button class="btn btn-primary" onclick="saveRepair(${unitId})">💾 Save Repair Record</button></div>`;
+  area.innerHTML = html;
+}
+
+function clearRp() {
+  document.getElementById('rp-results').innerHTML = `<div class="empty-state"><div class="empty-icon">🧾</div><p>Select a unit, upload a repair invoice, then hit <strong style="color:var(--accent)">Scan Invoice with AI</strong>.</p></div>`;
+  document.getElementById('rp-status').className = 'status-bar';
+  currentRpResult = null;
+}
+
+function getRpVals() {
+  const e={};
+  RP_FIELDS.forEach(f=>{ const el=document.getElementById('rf-'+f.key); e[f.key]=el?el.value.trim():''; });
+  return e;
+}
+
+function saveRepair(unitId) {
+  const vals = getRpVals();
+  vals.unit_id = unitId;
+  vals.saved_at = new Date().toLocaleDateString();
+  if (!repairData[unitId]) repairData[unitId] = [];
+  repairData[unitId].push(vals);
+
+  // Update last_service_date on unit if we got a repair date
+  const unit = trackerData.find(u => u.id == unitId);
+  if (unit && vals.repair_date && !unit.last_service_date) unit.last_service_date = vals.repair_date;
+
+  updateTrackerTable();
+  clearRp();
+  showNotif('Repair record saved ✓');
+}
+
+function addRpHistory(unit, parsed) {
+  const h = document.getElementById('rp-history');
+  const label = (unit ? unitLabel(unit) : 'Unit') + (parsed.repair_date ? ' · ' + parsed.repair_date : '');
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);margin-bottom:5px;font-size:11px;font-family:var(--mono);color:var(--text-muted);';
+  div.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0;display:inline-block;"></span>${esc(label)}`;
+  if (h.tagName === 'DIV') h.style.display = 'none';
+  h.parentNode.insertBefore(div, h);
+}
+
+// ─── REPAIR HISTORY MODAL ───
+function openRepairModal(unitId) {
+  modalUnitId = unitId;
+  const unit = trackerData.find(u => u.id == unitId);
+  const repairs = repairData[unitId] || [];
+
+  document.getElementById('modal-unit-title').textContent = unit ? unitLabel(unit) : 'Repair History';
+  document.getElementById('modal-unit-sub').textContent = unit
+    ? [unit.manufacturer, unit.model_number, unit.serial_number ? 'S/N: ' + unit.serial_number : ''].filter(Boolean).join(' · ')
+    : '';
+
+  const body = document.getElementById('modal-body');
+  if (!repairs.length) {
+    body.innerHTML = `<div class="modal-empty">
+      No repairs logged yet for this unit.<br>
+      <span style="font-size:12px;color:var(--text-dim);">Go to the <strong>Repair Invoice Scanner</strong> tab to add one.</span>
+    </div>`;
+  } else {
+    body.innerHTML = repairs.map((r, i) => `
+      <div class="repair-entry">
+        <div class="repair-entry-header">
+          <span class="repair-entry-num">Repair #${i+1} — saved ${r.saved_at||''}</span>
+          <span class="repair-entry-date">${r.repair_date||'Date unknown'}</span>
+        </div>
+        <div class="repair-grid">
+          <div class="rg-item"><label>Technician</label><span class="highlight">${esc(r.technician||'—')}</span></div>
+          <div class="rg-item"><label>Invoice / WO #</label><span>${esc(r.invoice_number||'—')}</span></div>
+          <div class="rg-item full"><label>Issue Found</label><span class="highlight">${esc(r.issue_found||'—')}</span></div>
+          <div class="rg-item full"><label>Work Performed</label><span>${esc(r.work_performed||'—')}</span></div>
+          <div class="rg-item full"><label>Parts Used</label><span>${esc(r.parts_used||'—')}</span></div>
+          <div class="rg-item"><label>Labor Cost</label><span>${esc(r.labor_cost||'—')}</span></div>
+          <div class="rg-item"><label>Parts Cost</label><span>${esc(r.parts_cost||'—')}</span></div>
+          <div class="rg-item"><label>Total Cost</label><span class="highlight">${esc(r.total_cost||'—')}</span></div>
+          <div class="rg-item"><label>Warranty</label><span>${esc(r.warranty_info||'—')}</span></div>
+          <div class="rg-item"><label>Next Service</label><span>${esc(r.next_service_due||'—')}</span></div>
+          ${r.repair_notes ? `<div class="rg-item full"><label>Notes</label><span>${esc(r.repair_notes)}</span></div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+  document.getElementById('repair-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('repair-modal').classList.remove('open');
+  modalUnitId = null;
+}
+
+document.getElementById('repair-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('repair-modal')) closeModal();
+});
+
+function exportRepairPDF() {
+  window.print();
+}
+
+// ─── EXPORT ───
+function exportCSV() {
+  if (!trackerData.length) { showNotif('No data to export'); return; }
+  const hdrs = NP_FIELDS.map(f => f.csvCol);
+  const rows = trackerData.map(e => {
+    if (e.install_year && !e.estimated_age) {
+      const yr = parseInt(e.install_year);
+      if (!isNaN(yr)) e.estimated_age = (new Date().getFullYear() - yr) + ' years';
+    }
+    return NP_FIELDS.map(f => '"' + (e[f.key]||'').replace(/"/g,'""') + '"');
+  });
+  dl('HVAC_Asset_Tracker.csv', [hdrs.join(','), ...rows.map(r=>r.join(','))].join('\n'), 'text/csv');
+  showNotif('CSV exported ✓');
+}
+
+function copyJSON() {
+  if (!trackerData.length) { showNotif('No data to copy'); return; }
+  const out = trackerData.map(u => ({ ...u, repairs: repairData[u.id]||[] }));
+  navigator.clipboard.writeText(JSON.stringify(out, null, 2));
+  showNotif('JSON copied ✓');
+}
+
+function dl(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content],{type}));
+  a.download = name; a.click();
+}
+
+// ─── HELPERS ───
+function setStatus(id, type, msg) {
+  const bar = document.getElementById(id);
+  bar.className = 'status-bar ' + type;
+  const sp = bar.querySelector('.spinner');
+  if (sp) sp.style.display = type==='scanning'?'block':'none';
+  const txt = bar.querySelector('span');
+  if (txt) txt.textContent = msg;
+}
+function cc(v) { return v==='high'?'ch':v==='medium'?'cm':'cl'; }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function showNotif(msg) {
+  const el = document.getElementById('notif');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
