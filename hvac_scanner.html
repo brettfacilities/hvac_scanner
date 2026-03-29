@@ -4,6 +4,31 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>HVAC Asset Manager</title>
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getFirestore, collection, doc, setDoc, addDoc, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  const fb = {
+    apiKey: "AIzaSyDdMU8-pbPyL31M-Y0C_3qN_EIklsp8o8A",
+    authDomain: "hvac-spreadsheet.firebaseapp.com",
+    projectId: "hvac-spreadsheet",
+    storageBucket: "hvac-spreadsheet.firebasestorage.app",
+    messagingSenderId: "884677529969",
+    appId: "1:884677529969:web:d66d431fd709f5866726d0"
+  };
+  const db = getFirestore(initializeApp(fb));
+  window.fbSaveUnit = async u => { try { await setDoc(doc(db,'units',String(u.id)), u); } catch(e){ console.error('fbSaveUnit',e); } };
+  window.fbSaveRepair = async r => { try { await addDoc(collection(db,'repairs'), r); } catch(e){ console.error('fbSaveRepair',e); } };
+  window.fbLoad = async () => {
+    try {
+      const us = await getDocs(collection(db,'units'));
+      const rs = await getDocs(collection(db,'repairs'));
+      const units = []; us.forEach(d => units.push({...d.data(), id: Number(d.id) || d.id}));
+      const repairs = {}; rs.forEach(d => { const r = d.data(); const uid = r.unit_id; if(!repairs[uid]) repairs[uid]=[]; repairs[uid].push(r); });
+      return {units, repairs};
+    } catch(e) { console.error('fbLoad',e); return {units:[], repairs:{}}; }
+  };
+  window.dispatchEvent(new CustomEvent('fb-ready'));
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -162,6 +187,7 @@
 <header>
   <div class="logo">⚙</div>
   <h1>HVAC Asset Manager</h1>
+  <div id="cloud-status" style="display:none;margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--accent);padding:4px 10px;border-radius:6px;border:1px solid rgba(0,212,170,0.2);"></div>
 </header>
 
 <!-- TABS -->
@@ -512,7 +538,8 @@ function addToTracker() {
   updateTrackerTable();
   updateRepairUnitSelect();
   addNpHistory(entry);
-  showNotif('Unit added to tracker ✓');
+  if (window.fbSaveUnit) window.fbSaveUnit(entry);
+  showNotif('Unit added to tracker ✓ — saved to cloud');
 }
 
 function updateTrackerTable() {
@@ -644,7 +671,8 @@ function saveRepair(unitId) {
 
   updateTrackerTable();
   clearRp();
-  showNotif('Repair record saved ✓');
+  if (window.fbSaveRepair) window.fbSaveRepair(vals);
+  showNotif('Repair saved to cloud ✓');
 }
 
 function addRpHistory(unit, parsed) {
@@ -756,6 +784,40 @@ function showNotif(msg) {
   el.textContent = msg; el.classList.add('show');
   setTimeout(()=>el.classList.remove('show'), 2500);
 }
+
+// ─── LOAD FROM FIREBASE ON STARTUP ───
+async function loadFromFirebase() {
+  if (!window.fbLoad) return;
+  setCloudStatus('loading');
+  try {
+    const { units, repairs } = await window.fbLoad();
+    if (units.length) {
+      trackerData = units;
+      repairData = repairs;
+      updateTrackerTable();
+      updateRepairUnitSelect();
+      setCloudStatus('loaded', units.length + ' units loaded from cloud');
+    } else {
+      setCloudStatus('empty');
+    }
+  } catch(e) {
+    setCloudStatus('error');
+  }
+}
+
+function setCloudStatus(state, msg) {
+  const bar = document.getElementById('cloud-status');
+  if (!bar) return;
+  const msgs = { loading: '☁ Connecting to Firebase…', loaded: msg || '☁ Data loaded', empty: '☁ Firebase connected — no data yet', error: '⚠ Firebase connection failed' };
+  const colors = { loading: 'rgba(59,130,246,0.15)', loaded: 'rgba(0,212,170,0.12)', empty: 'rgba(0,212,170,0.08)', error: 'rgba(255,77,106,0.1)' };
+  bar.textContent = msgs[state] || msg;
+  bar.style.background = colors[state] || '';
+  bar.style.display = 'block';
+}
+
+window.addEventListener('fb-ready', () => loadFromFirebase());
+// Fallback in case event already fired
+if (window.fbLoad) loadFromFirebase();
 </script>
 </body>
 </html>
