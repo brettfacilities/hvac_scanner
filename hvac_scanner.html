@@ -463,10 +463,16 @@ function openCam(inputId) {
 }
 
 // ─── AI CALL ───
+const ANTHROPIC_KEY = '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';
 async function callClaude(system, imgBase64, imgMime, userText) {
-  const res = await fetch('https://hvac-proxy.brettrussell1.workers.dev', {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1200,
@@ -478,8 +484,13 @@ async function callClaude(system, imgBase64, imgMime, userText) {
     })
   });
   const data = await res.json();
-  const raw = data.content.map(i => i.text||'').join('').replace(/```json|```/g,'').trim();
-  return JSON.parse(raw);
+  console.log('API response:', JSON.stringify(data));
+  if (!data.content || !data.content.length) throw new Error('No content in response');
+  const raw = data.content.map(i => i.type === 'text' ? i.text : '').join('').replace(/```json[\s\S]*?```/g, m => m.slice(7,-3)).replace(/```/g,'').trim();
+  console.log('Raw text:', raw);
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('No JSON found in response');
+  return JSON.parse(jsonMatch[0]);
 }
 
 // ─── NAMEPLATE SCAN ───
