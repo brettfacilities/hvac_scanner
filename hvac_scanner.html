@@ -11,18 +11,19 @@
     apiKey: "AIzaSyDdMU8-pbPyL31M-Y0C_3qN_EIklsp8o8A",
     authDomain: "hvac-spreadsheet.firebaseapp.com",
     projectId: "hvac-spreadsheet",
-    storageBucket: "hvac-spreadsheet.firebasestorage.app",
+    storageBucket: "hvac-spreadsheet.appspot.com",
     messagingSenderId: "884677529969",
     appId: "1:884677529969:web:d66d431fd709f5866726d0"
   };
-  const db = getFirestore(initializeApp(fb));
+  const app = initializeApp(fb);
+  const db = getFirestore(app);
   window.fbSaveUnit = async u => { try { await setDoc(doc(db,'units',String(u.id)), u); } catch(e){ console.error('fbSaveUnit',e); } };
   window.fbSaveRepair = async r => { try { await addDoc(collection(db,'repairs'), r); } catch(e){ console.error('fbSaveRepair',e); } };
   window.fbLoad = async () => {
     try {
       const us = await getDocs(collection(db,'units'));
       const rs = await getDocs(collection(db,'repairs'));
-      const units = []; us.forEach(d => units.push({...d.data(), id: Number(d.id) || d.id}));
+      const units = []; us.forEach(d => units.push({...d.data(), id: String(d.id)}));
       const repairs = {}; rs.forEach(d => { const r = d.data(); const uid = r.unit_id; if(!repairs[uid]) repairs[uid]=[]; repairs[uid].push(r); });
       return {units, repairs};
     } catch(e) { console.error('fbLoad',e); return {units:[], repairs:{}}; }
@@ -462,14 +463,46 @@ function openCam(inputId) {
   inp.click();
 }
 
+// ─── API KEY (stored in sessionStorage, never in code) ───
+function getApiKey() {
+  let key = sessionStorage.getItem('hvac_api_key');
+  if (!key) {
+    key = prompt('Enter your Anthropic API key to enable scanning:\n(Only asked once per session)');
+    if (key) sessionStorage.setItem('hvac_api_key', key.trim());
+  }
+  return key;
+}
+
+// ─── IMAGE COMPRESSOR ───
+async function compressImage(base64, mime) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1024;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL(mime || 'image/jpeg', 0.85).split(',')[1]);
+    };
+    img.src = 'data:' + mime + ';base64,' + base64;
+  });
+}
+
 // ─── AI CALL ───
-const ANTHROPIC_KEY = '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';
 async function callClaude(system, imgBase64, imgMime, userText) {
+  const key = getApiKey();
+  if (!key) throw new Error('No API key provided');
+  const compressed = await compressImage(imgBase64, imgMime);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
+      'x-api-key': key,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
@@ -478,18 +511,18 @@ async function callClaude(system, imgBase64, imgMime, userText) {
       max_tokens: 1200,
       system,
       messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: imgMime, data: imgBase64 } },
+        { type: 'image', source: { type: 'base64', media_type: imgMime, data: compressed } },
         { type: 'text', text: userText }
       ]}]
     })
   });
+  if (!res.ok) throw new Error('API error ' + res.status + ' — check your API key');
   const data = await res.json();
-  console.log('API response:', JSON.stringify(data));
-  if (!data.content || !data.content.length) throw new Error('No content in response');
-  const raw = data.content.map(i => i.type === 'text' ? i.text : '').join('').replace(/```json[\s\S]*?```/g, m => m.slice(7,-3)).replace(/```/g,'').trim();
-  console.log('Raw text:', raw);
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  if (!data.content || !data.content.length) throw new Error('Empty response from API');
+  const raw = data.content.map(i => i.type === 'text' ? i.text : '').join('').trim();
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('No JSON found in response');
+  if (!jsonMatch) throw new Error('Could not find JSON in: ' + raw.substring(0,100));
   return JSON.parse(jsonMatch[0]);
 }
 
@@ -524,7 +557,7 @@ Rules:
     renderNpFields(parsed);
     setStatus('np-status','done','Extraction complete — review and add to tracker');
   } catch(e) {
-    setStatus('np-status','error','Extraction failed — check connection');
+    setStatus('np-status','error','Error: ' + (e.message || JSON.stringify(e)));
   }
   document.getElementById('np-scan-btn').disabled = false;
 }
@@ -560,7 +593,7 @@ function unitLabel(u) {
 }
 
 function addToTracker() {
-  const entry = { ...getNpVals(), id: Date.now(), timestamp: new Date().toLocaleDateString() };
+  const entry = { ...getNpVals(), id: String(Date.now()), timestamp: new Date().toLocaleDateString() };
   if (entry.install_year && !entry.estimated_age) {
     const yr = parseInt(entry.install_year);
     if (!isNaN(yr)) entry.estimated_age = (new Date().getFullYear() - yr) + ' years';
@@ -656,7 +689,7 @@ Rules:
     setStatus('rp-status','done','Invoice read — review and save repair record');
     addRpHistory(unit, parsed);
   } catch(e) {
-    setStatus('rp-status','error','Extraction failed — check connection');
+    setStatus('rp-status','error','Error: ' + (e.message || JSON.stringify(e)));
   }
   document.getElementById('rp-scan-btn').disabled = false;
 }
