@@ -218,6 +218,13 @@
   <div class="tab" onclick="switchTab('repair')">Repair Invoice Scanner</div>
 </div>
 
+<!-- API KEY BAR -->
+<div id="api-key-bar" style="background:#1a1a2e;border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;">
+  <span style="font-size:12px;font-family:var(--mono);color:var(--amber);white-space:nowrap;">🔑 API Key required:</span>
+  <input id="api-key-input" type="password" placeholder="Paste your Anthropic API key (sk-ant-api03-...)" style="flex:1;background:var(--surface2);border:1px solid var(--border-bright);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;font-family:var(--mono);outline:none;">
+  <button onclick="saveApiKey()" style="background:var(--accent);color:#081a12;border:none;border-radius:6px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;">Save Key</button>
+</div>
+
 <!-- ══════════════════ TAB 1: NAMEPLATE ══════════════════ -->
 <div class="tab-content active" id="tab-nameplate">
   <div class="left-panel">
@@ -463,14 +470,21 @@ function openCam(inputId) {
   inp.click();
 }
 
-// ─── API KEY (stored in sessionStorage, never in code) ───
+// ─── API KEY (stored in sessionStorage) ───
 function getApiKey() {
   let key = sessionStorage.getItem('hvac_api_key');
   if (!key) {
-    key = prompt('Enter your Anthropic API key to enable scanning:\n(Only asked once per session)');
-    if (key) sessionStorage.setItem('hvac_api_key', key.trim());
+    key = document.getElementById('api-key-input') ? document.getElementById('api-key-input').value.trim() : '';
+    if (key) sessionStorage.setItem('hvac_api_key', key);
   }
   return key;
+}
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if (!val) { showNotif('Please paste your API key first'); return; }
+  sessionStorage.setItem('hvac_api_key', val);
+  document.getElementById('api-key-bar').style.display = 'none';
+  showNotif('API key saved ✓ — ready to scan!');
 }
 
 // ─── IMAGE COMPRESSOR ───
@@ -880,6 +894,13 @@ function setCloudStatus(state, msg) {
   bar.style.display = 'block';
 }
 
+// Hide API key bar if already saved
+if (sessionStorage.getItem('hvac_api_key')) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const bar = document.getElementById('api-key-bar');
+    if (bar) bar.style.display = 'none';
+  });
+}
 window.addEventListener('fb-ready', () => loadFromFirebase());
 if (window.fbLoad) loadFromFirebase();
 
