@@ -463,9 +463,8 @@ function openCam(inputId) {
   inp.click();
 }
 
-// ─── API KEY ───
-const ANTHROPIC_KEY = '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';
-function getApiKey() { return ANTHROPIC_KEY; }
+// ─── API routed through secure Cloudflare Worker ───
+const WORKER_URL = 'https://hvac-proxy.brettrussell1.workers.dev';
 
 // ─── IMAGE COMPRESSOR ───
 async function compressImage(base64, mime) {
@@ -489,17 +488,10 @@ async function compressImage(base64, mime) {
 
 // ─── AI CALL ───
 async function callClaude(system, imgBase64, imgMime, userText) {
-  const key = getApiKey();
-  if (!key) throw new Error('No API key provided');
   const compressed = await compressImage(imgBase64, imgMime);
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch(WORKER_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1200,
